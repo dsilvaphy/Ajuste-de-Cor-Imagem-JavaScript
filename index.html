@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<link rel="icon" type="image/png" href="exemplo.png">
+
+<head>
+    <meta name="author" content="D Silva">
+    <meta charset="utf-8">
+</head>
+
+<style>
+    body {
+        background-color: #333333;
+	color: white
+    }
+</style>
+
+<body>
+
+<div align="center" class="logo">
+ <a href="https://github.com/dsilvaphy" target="_blank">
+    <img class="logo" src="logo.png">
+ </a>
+</div>
+
+
+<p align="center" id="titulo" style="margin-bottom: 10px; font-family: 'Arial', sans-serif;font-size: 24px;">
+   MANIPULAÇÃO DE CORES EM IMAGEM
+</p>
+
+<div align="center">
+<input type="button" value="Selecione uma imagem" onclick="document.getElementById('file').click();" style="margin-top: 10px; padding: 10px 20px; font-size: 16px; background-color: #444; color: white; border: none; border-radius: 5px; cursor: pointer;" />
+
+    <input type="file" style="display:none;" id="file" onchange="onFileSelected(event)" />
+</div>
+
+<div align="center" style="margin: 0.5em;">
+	<canvas id="inpCnv"></canvas>
+</div>
+
+<div align="center" style="margin: 0.5em;">
+	<canvas id="outCnv"></canvas>
+</div>
+
+<div style="width: 400px; font-family: 'Arial', sans-serif; font-size: 14px; margin: auto;">
+	AND: 
+	<input type="radio" name="color" id="A_R"   onChange="update(0)"> R
+	<input type="radio" name="color" id="A_G"   onChange="update(0)"> G
+	<input type="radio" name="color" id="A_B"   onChange="update(0)"> B
+	<input type="radio" name="color" id="A_RG"  onChange="update(0)"> RG
+	<input type="radio" name="color" id="A_RB"  onChange="update(0)"> RB
+	<input type="radio" name="color" id="A_GB"  onChange="update(0)"> GB
+	<br>
+	XOR: 
+	<input type="radio" name="color" id="X_R"   onChange="update(0)"> R
+	<input type="radio" name="color" id="X_G"   onChange="update(0)"> G
+	<input type="radio" name="color" id="X_B"   onChange="update(0)"> B
+	<input type="radio" name="color" id="X_RG"  onChange="update(0)"> RG
+	<input type="radio" name="color" id="X_RB"  onChange="update(0)"> RB
+	<input type="radio" name="color" id="X_GB"  onChange="update(0)"> GB
+	<input type="radio" name="color" id="X_RGB" onChange="update(0)"> RGB
+
+	<table style="width: 400px; margin: auto;">
+		<tr>
+			<td>
+			R: 0 <input type="range" min="0" max="255" value="0" id="rngR" onInput="update(1)"> 255 <br>
+			G: 0 <input type="range" min="0" max="255" value="0" id="rngG" onInput="update(1)"> 255 <br>
+			</td>
+			<td>
+			B: 0 <input type="range" min="0" max="255" value="0" id="rngB" onInput="update(1)"> 255 <br>
+			A: 0 <input type="range" min="0" max="255" value="255" id="rngA" onInput="update(1)"> 255 <br>
+			</td>
+		</tr>
+	</table>
+
+</div>
+
+<script>
+class Random {
+    constructor() {
+        this.a = 865255979432265;
+        this.b = 450158158078553;
+        this.m = 192211551407955;
+        this.x = 637185883168984;
+    }
+    num() {
+        this.x = (this.a*this.x + this.b)%this.m;
+        return this.x%256;
+    }
+    reset() {
+    	this.x = 637185883168984;
+    }
+}
+let rand = new Random();
+
+let inpCnv = document.getElementById("inpCnv");
+let outCnv = document.getElementById("outCnv");
+let inpCtx = inpCnv.getContext("2d",{ willReadFrequently: true });
+let outCtx = outCnv.getContext("2d",{ willReadFrequently: true });
+let pixels;
+
+let img = new Image();
+img.src = "exemplo.png";
+
+let opts = document.getElementsByName("color");
+let iOpts = 0;
+let autoColors = ["R","G","B"];
+let autoColor = 0;
+let autoLevel = 0;
+let timer;
+
+img.onload = function() {
+    const maxDimension = 300;
+    let imgWidth = img.width;
+    let imgHeight = img.height;
+
+    // Ajuste proporcional para restringir dimensões
+    if (imgWidth > maxDimension || imgHeight > maxDimension) {
+        if (imgWidth > imgHeight) {
+            imgHeight = (imgHeight / imgWidth) * maxDimension;
+            imgWidth = maxDimension;
+        } else {
+            imgWidth = (imgWidth / imgHeight) * maxDimension;
+            imgHeight = maxDimension;
+        }
+    }
+
+    inpCnv.width = outCnv.width = imgWidth;
+    inpCnv.height = outCnv.height = imgHeight;
+
+    inpCtx.drawImage(img, 0, 0, imgWidth, imgHeight);
+
+    // Captura os dados do canvas original
+    pixels = inpCtx.getImageData(0, 0, imgWidth, imgHeight);
+    bytesOrg = new Uint8ClampedArray(pixels.data);
+
+    // Atualiza o canvas de saída com a imagem inicial
+    outCtx.putImageData(pixels, 0, 0);
+
+    // Aplica um filtro padrão no canvas de saída
+    update(0);
+};
+
+
+function onFileSelected(event) {
+	rand.reset();
+	let selectedFile = event.target.files[0];
+	let reader = new FileReader();
+	reader.onload = function(event) { 
+		img.src = event.target.result; 
+		inpCtx.drawImage(img,0,0);
+		pixels = inpCtx.getImageData(0, 0, img.width, img.height);
+		bytesOrg = new Uint8ClampedArray(pixels.data);
+		outCtx.putImageData(pixels, 0, 0);
+		iOpts = 0; autoColor = 0; autoLevel = 0;
+		if (timer) clearInterval(timer);
+	};
+	reader.readAsDataURL(selectedFile);
+}
+
+
+
+function update(type) {
+    if (type === 0) {
+        let opts = document.getElementsByName("color");
+        let colorOpt;
+        for (let i in opts) {
+            if (opts[i].checked) {
+                colorOpt = opts[i].id;
+            }
+        }
+        pixels = inpCtx.getImageData(0, 0, inpCnv.width, inpCnv.height);
+        removeColor(pixels.data, colorOpt);
+        outCtx.putImageData(pixels, 0, 0);
+    } 
+    else if (type === 1) {
+        let r = parseInt(document.getElementById("rngR").value);
+        let g = parseInt(document.getElementById("rngG").value);
+        let b = parseInt(document.getElementById("rngB").value);
+        let a = parseInt(document.getElementById("rngA").value);
+        editColors(pixels.data, r, g, b, a);
+        outCtx.putImageData(pixels, 0, 0);
+    } 
+    else {
+        swapColors(pixels.data);
+        outCtx.putImageData(pixels, 0, 0);
+    }
+}
+
+function swapColors(rgbaArray) {
+	let bytes = new Uint8ClampedArray(rgbaArray.buffer);
+	for (let i=0; i<bytes.length; i++) {
+		if (i%4!=3) {
+			bytes[i] = bytes[i] ^ rand.num();
+		}
+	}
+}
+
+
+function editColors(rgbaArray,r,g,b,a) {
+	let bytes = new Uint8ClampedArray(rgbaArray.buffer);
+	for (let i=0; i<bytes.length; i++) {
+		switch (i%4) {
+			case 0: bytes[i] = bytesOrg[i]/255*r; break;
+			case 1: bytes[i] = bytesOrg[i]/255*g; break;
+			case 2: bytes[i] = bytesOrg[i]/255*b; break;
+			case 3: bytes[i] = bytesOrg[i]/255*a; break;
+		}
+	}
+}
+
+function removeColor(rgbaArray,color) {
+	let colours = new Uint32Array(rgbaArray.buffer);
+	let MASK;
+	if (!color) {
+		return
+	}
+	else {
+		let tkn = color.split("_");
+		if (tkn[0]=="X")
+		{
+			switch (tkn[1]) {
+				case "R": MASK = 0x000000FF; break; // no vermelho
+				case "G": MASK = 0x0000FF00; break; // no verde
+				case "B": MASK = 0x00FF0000; break; // no azul
+				case "RG": MASK = 0x0000FFFF; break; // no vermelho/verde
+				case "RB": MASK = 0x00FF00FF; break; // no vermelho/azul
+				case "GB": MASK = 0x00FFFF00; break; // no verde/azul
+				case "RGB": MASK = 0x00FFFFFF; break; // todos
+				default: MASK = 0x00000000; // nada acontece
+			}
+			for(var i=0; i<colours.length; i++) {
+				colours[i] = colours[i] ^ MASK;
+			}
+		}
+		else {
+			switch (tkn[1]) {
+				case "GB": MASK = 0xFFFFFF00; break; // sem vermelho
+				case "RB": MASK = 0xFFFF00FF; break; // sem verde
+				case "RG": MASK = 0xFF00FFFF; break; // sem azul
+				case "G": MASK = 0xFF00FF00; break; // sem vermelho e azul
+				case "B": MASK = 0xFFFF0000; break; // sem vermelho e verde
+				case "R": MASK = 0xFF0000FF; break; // sem verde e azul
+				default: MASK = 0xFFFFFFFF; // nada acontece
+			}
+			for(var i=0; i<colours.length; i++) {
+				colours[i] = colours[i] & MASK;
+			}
+		}		
+	}
+}
+
+function autoUpdate() {
+	document.getElementById("rng" + autoColors[autoColor]).value = autoLevel;
+	autoLevel++;
+	if (autoLevel>255) { autoLevel = 0; autoColor++ };
+	if (autoColor>2) { 
+		clearInterval(timer);
+		timer = setInterval("autoUpdate2()",500);
+	};
+	update(1);
+}
+
+function autoUpdate2() {
+	document.getElementById(opts[iOpts].id).checked = true;
+	update(0);
+	iOpts++;
+	if (iOpts>12) {
+		clearInterval(timer);
+		update(3);
+	}
+}
+
+</script>
+
+
+</body>
+</html>
+
